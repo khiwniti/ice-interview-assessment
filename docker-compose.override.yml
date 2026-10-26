@@ -1,0 +1,59 @@
+# Development override for docker-compose.yml
+# Usage: docker compose -f docker-compose.yml -f docker-compose.override.yml up --build -d
+
+version: '3.8'
+
+services:
+  db:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: dev_password_change_me
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: build
+    command: ["dotnet", "watch", "run", "--project", "src/BusinessAnalytics.Api"]
+    volumes:
+      - ../src:/src/src:cached
+      - ../tests:/src/tests:cached
+      - ../BusinessAnalytics.sln:/src/BusinessAnalytics.sln:cached
+      - ~/.nuget/packages:/root/.nuget/packages:cached
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=db;Database=business_analytics;Username=app_user;Password=dev_password_change_me;Include Error Detail=true"
+      JWT_KEY: dev-secret-key-change-in-production-min-32-chars-long
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: build
+    command: ["dotnet", "ef", "database", "update", "--project", "src/BusinessAnalytics.Infrastructure", "--startup-project", "src/BusinessAnalytics.Api"]
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=business_analytics;Username=app_user;Password=dev_password_change_me;Include Error Detail=true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  seed:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: build
+    command: ["dotnet", "run", "--project", "tools/DevelopmentSeeder"]
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=business_analytics;Username=app_user;Password=dev_password_change_me;Include Error Detail=true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

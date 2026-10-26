@@ -1,0 +1,54 @@
+# Pre-commit hooks for code quality
+# Install: pip install pre-commit && pre-commit install
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+
+  - repo: https://github.com/dotnet/format
+    rev: v8.0.0
+    hooks:
+      - id: dotnet-format
+        args: ['--verify-no-changes']
+
+  - repo: https://github.com/microsoft/dotnet-roslyn-analyzers
+    rev: v8.0.0
+    hooks:
+      - id: dotnet-analyzers
+        additional_dependencies:
+          - 'Microsoft.CodeAnalysis.NetAnalyzers>=8.0.0'
+          - 'StyleCop.Analyzers>=1.2.0'
+
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        types: [shell]
+        args: ['-x']
+
+      - id: dotnet-build
+        name: dotnet build
+        entry: dotnet
+        args: ['build', 'BusinessAnalytics.sln', '--no-restore', '-c', 'Release']
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: dotnet-test
+        name: dotnet test
+        entry: dotnet
+        args: ['test', 'BusinessAnalytics.sln', '--no-build', '-c', 'Release']
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

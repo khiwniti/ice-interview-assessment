@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: business-analytics-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-business_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-business_analytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - business-analytics-network
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: build
+    container_name: business-analytics-migrate
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=${POSTGRES_DB:-business_analytics};Username=${POSTGRES_USER:-app_user};Password=${POSTGRES_PASSWORD:-dev_password_change_me};Include Error Detail=true"
+      ASPNETCORE_ENVIRONMENT: Development
+    entrypoint: ["dotnet", "ef", "database", "update", "--project", "src/BusinessAnalytics.Infrastructure", "--startup-project", "src/BusinessAnalytics.Api"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - business-analytics-network
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    container_name: business-analytics-api
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=db;Database=${POSTGRES_DB:-business_analytics};Username=${POSTGRES_USER:-app_user};Password=${POSTGRES_PASSWORD:-dev_password_change_me};Include Error Detail=true"
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      Jwt__Key: ${JWT_KEY:-dev-secret-key-change-in-production-min-32-chars-long}
+      Jwt__Issuer: ${JWT_ISSUER:-BusinessAnalytics}
+      Jwt__Audience: ${JWT_AUDIENCE:-BusinessAnalytics}
+      Cors__Origins__0: ${CORS_ORIGIN_0:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - business-analytics-network
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  backup:
+    image: postgres:16-alpine
+    container_name: business-analytics-backup
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - backup_data:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      apk add --no-cache bash curl &&
+      while true; do
+        sleep 86400; # Run daily
+        TIMESTAMP=$$(date +%Y%m%d-%H%M%S)
+        pg_dump --format=custom --file="/backups/backup-$${TIMESTAMP}.dump" --host=db --username=${POSTGRES_USER:-app_user} --dbname=${POSTGRES_DB:-business_analytics} &&
+        find /backups -name "backup-*.dump" -mtime +7 -delete
+      done
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - business-analytics-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  backup_data:
+    driver: local
+
+networks:
+  business-analytics-network:
+    driver: bridge

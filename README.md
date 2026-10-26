@@ -14,20 +14,48 @@ A project-monitoring REST API built with **.NET 8**, **Clean Architecture**, **P
 - **Backup/Restore**: Automated pg_dump/pg_restore with retention and verification
 - **Resource Monitoring**: CPU, memory, and disk usage reporting
 - **Log Rotation**: Linux logrotate integration with compression
-
 ## Quick Start
 
-### Prerequisites
-- Docker and Docker Compose
-- Git
-
-### One-Command Setup
+### Option 1: Automated Installation (Recommended)
 
 ```bash
-git clone <repository-url>
-cd business-analytics
+# Install prerequisites (Docker, Docker Compose, .NET 8, Git, jq, shellcheck)
+curl -fsSL https://raw.githubusercontent.com/khiwniti/ice-interview-assessment/main/scripts/install.sh | sudo bash
+
+# Clone and run complete E2E test
+git clone https://github.com/khiwniti/ice-interview-assessment.git
+cd ice-interview-assessment
+./scripts/e2e-test.sh
+```
+
+### Option 2: Manual Setup
+
+#### Prerequisites
+- Docker and Docker Compose v2
+- Git
+
+#### One-Command Setup
+
+```bash
+git clone https://github.com/khiwniti/ice-interview-assessment.git
+cd ice-interview-assessment
 cp .env.example .env
 docker compose up --build -d
+```
+
+### Run Complete E2E Test Suite
+
+```bash
+# Full automated test (health, CRUD, reports, exports, operations, persistence)
+./scripts/e2e-test.sh
+
+# Or run individual test phases
+./scripts/smoke-test.sh          # API + CRUD + reports + exports
+./scripts/health-check.sh        # Service health verification
+./scripts/monitor-resources.sh   # CPU, memory, disk monitoring
+./scripts/backup.sh              # Database backup
+./scripts/restore.sh --list      # List available backups
+./scripts/rotate-logs.sh         # Log rotation
 ```
 
 The API will be available at `http://localhost:8080` with Swagger UI at `http://localhost:8080/swagger`.
